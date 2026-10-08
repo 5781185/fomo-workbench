@@ -48,3 +48,17 @@ export function computeRrg(bars: EtfBar[], etfs: { symbol: string; name: string 
 const etParts = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'short' }).formatToParts(new Date())
 const etToday = () => { const g = (t: string) => etParts().find(x => x.type === t)!.value; return `${g('year')}-${g('month')}-${g('day')}` }
 const usSessionOpen = () => { const g = (t: string) => etParts().find(x => x.type === t)!.value; const min = +g('hour') * 60 + +g('minute'); return !['Sat', 'Sun'].includes(g('weekday')) && min >= 570 && min < 960 }
+
+// Smooth SVG path through the points (Catmull-Rom → cubic Bézier); passes through every point.
+export function smoothPath(p: { x: number; y: number }[]): string {
+  if (!p.length) return ''
+  let d = `M${p[0].x},${p[0].y}`
+  for (let i = 0; i < p.length - 1; i++) {
+    const a = p[i - 1] ?? p[i], b = p[i], c = p[i + 1], e = p[i + 2] ?? c
+    d += ` C${b.x + (c.x - a.x) / 6},${b.y + (c.y - a.y) / 6} ${c.x - (e.x - b.x) / 6},${c.y - (e.y - b.y) / 6} ${c.x},${c.y}`
+  }
+  return d
+}
+
+// Glow strength 0..1 from volRatio: none at ≤0.6× the 20-day average, full at ≥2×.
+export const glowStrength = (volRatio: number) => Math.min(1, Math.max(0, (volRatio - 0.6) / 1.4))

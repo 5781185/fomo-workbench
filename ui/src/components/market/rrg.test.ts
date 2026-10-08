@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { EtfBar } from '../../api'
-import { HORIZONS, computeRrg } from './rrg'
+import { HORIZONS, computeRrg, glowStrength, smoothPath } from './rrg'
 
 // N consecutive weekdays in 2025 (well before today, so the "partial session" branch is never taken)
 function dates(n: number): string[] {
@@ -54,5 +54,29 @@ describe('computeRrg', () => {
     expect(ds.length).toBeLessThan(n + m + step * tail)
     expect(computeRrg(bars, ETFS, 'Q')).toEqual([])
     expect(computeRrg(bars.filter(b => b.symbol !== 'SPY'), ETFS, 'D')).toEqual([])
+  })
+})
+
+describe('smoothPath', () => {
+  it('starts and ends on the first and last points, one curve per segment', () => {
+    const d = smoothPath([{ x: 0, y: 0 }, { x: 10, y: 5 }, { x: 20, y: 0 }])
+    expect(d.startsWith('M0,0')).toBe(true)
+    expect(d.endsWith(' 20,0')).toBe(true)
+    expect(d.match(/C/g)).toHaveLength(2)
+    expect(d).toContain(' 10,5 C')  // passes through the middle point
+  })
+  it('handles 0 and 1 points', () => {
+    expect(smoothPath([])).toBe('')
+    expect(smoothPath([{ x: 3, y: 4 }])).toBe('M3,4')
+  })
+})
+
+describe('glowStrength', () => {
+  it('is 0 for quiet sessions, 1 for busy ones, linear between', () => {
+    expect(glowStrength(0.4)).toBe(0)
+    expect(glowStrength(0.6)).toBe(0)
+    expect(glowStrength(1.3)).toBeCloseTo(0.5, 9)
+    expect(glowStrength(2)).toBe(1)
+    expect(glowStrength(5)).toBe(1)
   })
 })
