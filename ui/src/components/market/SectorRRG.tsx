@@ -5,7 +5,6 @@ import { computeRrg, glowStrength, smoothPath, type Horizon, type RrgSector } fr
 
 const W = 720, H = 520, PAD = 36
 const QUAD = { leading: '#26a69a', weakening: '#f5b166', lagging: '#ef5350', improving: '#4f8cff' }
-const GOLD = '#f5c451'
 const quadrant = (x: number, y: number) => x >= 100 ? (y >= 100 ? 'leading' : 'weakening') : (y >= 100 ? 'improving' : 'lagging')
 
 export default function SectorRRG({ s }: { s: Strings }) {
@@ -70,14 +69,14 @@ export default function SectorRRG({ s }: { s: Strings }) {
                 d={smoothPath(sec.tail.map(p => ({ x: sx(p.x), y: sy(p.y) })))} style={{ transition: 'opacity .3s' }} />
             })}
             </g>
-            {/* bubbles: frosted glass with a gold glow that strengthens with volRatio; transform transitions so they glide on open and when the horizon changes */}
+            {/* bubbles: frosted glass with a quadrant-coloured glow that strengthens with volRatio; transform transitions so they glide on open and when the horizon changes */}
             {sectors.map(sec => {
-              const r = radius(sec.volRatio), g = glowStrength(sec.volRatio), dim = hover && hover.symbol !== sec.symbol
+              const q = quadrant(sec.now.x, sec.now.y), r = radius(sec.volRatio), g = glowStrength(sec.volRatio), dim = hover && hover.symbol !== sec.symbol
               const at = entered ? sec.now : sec.tail[sec.tail.length - 2] ?? sec.now
               return (
                 <g key={sec.symbol} style={{ transform: `translate(${sx(at.x)}px, ${sy(at.y)}px)`, transition: 'transform 1.2s cubic-bezier(.22,1,.36,1), opacity .3s' }} opacity={dim ? 0.25 : 1}
                   onMouseEnter={() => setHover(sec)} className="cursor-default">
-                  <circle r={r * (1.15 + 0.45 * g)} fill={GOLD} opacity={0.12 + 0.6 * g} filter="url(#rrg-glow)" style={{ transition: 'r .6s ease, opacity .6s' }} />
+                  <circle r={r * (1.15 + 0.45 * g)} fill={QUAD[q]} opacity={0.12 + 0.6 * g} filter="url(#rrg-glow)" style={{ transition: 'r .6s ease, opacity .6s' }} />
                   <circle r={r} fill="url(#rrg-glass)" stroke="#fff" strokeOpacity={0.55} strokeWidth={1} style={{ transition: 'r .6s ease' }} />
                   <text y={3.5} textAnchor="middle" fontSize={r >= 14 ? 10 : 8} fill="#f3f5f9" fontFamily="JetBrains Mono, monospace" fontWeight={600}>{sec.symbol}</text>
                 </g>
