@@ -120,11 +120,47 @@ All three sets use the upstream defaults — 20,000 timesteps, one seed, one run
 split — so differences between baskets describe *these training runs*, not tech vs. blue-chip
 investing. The UI says so on the panel.
 
+### Did the engines call it? A first scorecard
+
+The daily brief stores every call, so the engines can be graded after the fact.
+`agent/review.py` scores each FinGPT direction and each FinRL BUY/SELL (HOLD abstains; each
+basket's five-agent majority vote is scored too) against the close five trading days later, and
+prints every hit rate beside the baselines it has to beat: *always Up*, and the engine's own mix of
+Up/Down calls *shuffled at random*.
+
+```bash
+cd agent && ../envs/fingpt/bin/python review.py
+```
+
+First run, 2026-10-31, over the briefs of 2026-09-21 – 10-23:
+
+| | calls | hit rate | always Up | shuffled | avg 5-day return following it |
+|---|---|---|---|---|---|
+| FinGPT, headlines + summaries (Sept) | 43 | 44.2% | 39.5% | 53.2% | +0.06% |
+| FinGPT, headlines only (from Oct 8) | 96 | 51.0% | 52.1% | 49.5% | +0.49% |
+
+**Neither engine shows an edge you can tell apart from chance.** FinGPT's 1-point ranges
+(`Up by 2-3%`) contained the actual move about 8–9% of the time. The two FinGPT periods are kept
+apart because the model's input changed between them.
+
+The FinRL numbers look better (the SAC agents hit 63–65%), but the scorecard turned up something
+more interesting than a hit rate: **most agents give each stock the same direction day after day**.
+Four of the five agents in the 2014 DOW basket called NVDA a SELL and JPM a BUY on all 26
+sessions; one agent in the 2019 DOW basket never said BUY at all; two pairs of agents agree on
+every single call. These agents behave
+like a fixed long/short book rather than a daily timing signal, so their hit rate only says whether
+those few stocks happened to rise or fall this month. The scorecard flags it with a `fixed` column
+(tickers whose call never changed).
+
+The usual caveats apply, and the script prints them: daily calls over 5-day windows overlap, the
+watchlist stocks move together, and six weeks is a handful of independent observations, not the
+hundreds the `n` column suggests. The numbers will move as briefs accumulate.
+
 ### Decisions worth knowing
 
 - **Upstream projects are dependencies, not forks.** OpenBB, FinRL and FinGPT are installed
   or cloned unmodified; all glue lives in `openbb-backend/`, `agent/`, `ui/` and `training/`
-  (~3.3k lines, plus ~440 of tests).
+  (~3.4k lines, plus ~510 of tests).
   Upgrading is `pip install --upgrade` / `git pull`, and versions are pinned in `requirements/`.
 - **Own dashboard instead of OpenBB Workspace.** OpenBB Inc. announced its wind-down in
   August 2026 and Workspace registration is closed; the open-source data platform is unaffected.
@@ -149,6 +185,8 @@ investing. The UI says so on the panel.
   and silently falls back to 60 s polling if it breaks. FINRA dark-pool data lags ~2 weeks.
 - The sector RRG is a public approximation of the proprietary JdK calculation.
 - Sector "rotation" bars are a performance proxy, not fund-flow data.
+- So far neither engine beats its baselines, and most FinRL agents hold one direction per stock
+  for weeks (see the scorecard above). Treat both panels as model output to inspect, not signals.
 
 ## Running it
 
@@ -196,7 +234,7 @@ the same backends. `.claude/launch.json` holds the same commands for Claude Code
 
 The glue layer's pure logic has unit tests (no services or network needed): tick folding into
 bars, the squarified treemap, the RRG approximation, the FINRA reporting-week mapping, the Gemini
-schema conversion and the last-complete-session rule.
+schema conversion, the last-complete-session rule and the engine scorecard's grading.
 
 ```bash
 cd ui && npx vitest run
@@ -209,7 +247,7 @@ cd openbb-backend && ../envs/finrl/bin/python -m pytest   # imports the trained 
 ```
 openbb-backend/   FastAPI: finrl_signal, eps_trend, institutional, live_quote; baskets.json; serves ui/dist; tests/
 training/         train_basket.py — trains one basket's five agents from baskets.json
-agent/            FastAPI + Gemini loop; brief.py (daily brief + scheduler); tools/{fingpt,finrl}_tool.py; tests/
+agent/            FastAPI + Gemini loop; brief.py (daily brief + scheduler); review.py (engine scorecard); tools/{fingpt,finrl}_tool.py; tests/
 ui/               React + Vite + Tailwind; src/components/{market,fundamentals,technical,news,ownership,financials}; *.test.ts beside the code
 requirements/     pip freeze of each venv (openbb / finrl / fingpt)
 fingpt-smoke/     standalone FinGPT inference check used before wiring the agent

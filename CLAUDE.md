@@ -47,7 +47,7 @@
 
 ## 目前狀態（2026-10-08）
 
-Phase 1–17 全部完成。Phase 1–16 的逐步決策紀錄在 `docs/phases.md`；Phase 17（FinRL 三個模型籃）與 10 月的幾次修復只記在本檔的「已知的坑」與 git log 裡。給人看的英文說明在 `README.md`（含截圖）。
+Phase 1–17 全部完成。Phase 1–16 的逐步決策紀錄在 `docs/phases.md`；Phase 17（FinRL 三個模型籃）與 10 月的幾次修復只記在本檔的「已知的坑」與 git log 裡。給人看的英文說明在 `README.md`（含截圖）。2026-10-31 起有引擎評分（`agent/review.py`，見「已知的坑」的〈引擎評分〉）。
 
 **四個服務**（日常用 ODP Desktop 的 Backends 畫面啟動，順序 API → MCP → backend → agent；Claude Code session 用 `.claude/launch.json`，同一組指令）：
 
@@ -62,12 +62,12 @@ Phase 1–17 全部完成。Phase 1–16 的逐步決策紀錄在 `docs/phases.m
 - 改 `openbb-backend/` 或 `agent/` → 在 ODP Desktop 把該服務 **Stop → Start**（沒有 auto-reload）。agent 重啟後第一次 FinGPT 呼叫多 8 秒載模型。
 - 改 `ui/` → `cd ui && npm run build`（8001 直接 serve 新的 `ui/dist`）。開發時 `npm run dev`（5173）打同一組後端。
 - 改了 venv 的套件 → `uv pip freeze` 更新 `requirements/<env>.lock.txt`（安裝時用 `--no-deps`，見 README）。
-- **測試**（純函式，不需要服務）：`cd ui && npx vitest run`；`cd agent && ../envs/fingpt/bin/python -m pytest`；`cd openbb-backend && ../envs/finrl/bin/python -m pytest`。改了這些純函式要跑：`applyTick`／`rrg.ts`／`squarify.ts`／`darkpool.ts`／`market/brief.ts`（`failures`／`covered`／`weekdaysBehind`）／`widgets/news.py` 的 `to_items`／`finrl_signal.py` 的 `complete_sessions`／`brief.py` 的 `_finrl_tallies`／`_summary_input`／`tools/http.py`／`_gemini_schema`／`last_complete_session`。純邏輯放在元件旁的 `.ts` 檔（不是元件檔內），測試才 import 得到。
+- **測試**（純函式，不需要服務）：`cd ui && npx vitest run`；`cd agent && ../envs/fingpt/bin/python -m pytest`；`cd openbb-backend && ../envs/finrl/bin/python -m pytest`。改了這些純函式要跑：`applyTick`／`rrg.ts`／`squarify.ts`／`darkpool.ts`／`market/brief.ts`（`failures`／`covered`／`weekdaysBehind`）／`widgets/news.py` 的 `to_items`／`finrl_signal.py` 的 `complete_sessions`／`brief.py` 的 `_finrl_tallies`／`_summary_input`／`tools/http.py`／`_gemini_schema`／`last_complete_session`／`review.py` 的 `parse_prediction`／`forward_return`／`collect`／`score`。純邏輯放在元件旁的 `.ts` 檔（不是元件檔內），測試才 import 得到。
 
-**程式碼位置**（自寫的膠水層約 3.3k 行，另有 440 行測試）：
+**程式碼位置**（自寫的膠水層約 3.4k 行，另有 510 行測試）：
 - `openbb-backend/main.py` + `widgets/{finrl_signal,eps_trend,institutional,live_quote,news}.py`，`baskets.json`（FinRL 模型籃定義，Phase 17），`widgets.json`（OpenBB Workspace 規格，目前沒有消費端）
 - `training/train_basket.py`：依 `baskets.json` 訓練一組籃子的 5 個 agent（`cd training && ../envs/finrl/bin/python train_basket.py tech30`，約 10–20 分鐘）
-- `agent/main.py`（SSE 端點 + `/watchlist`、`/brief`、`/brief/run`）、`loop.py`（Gemini 迴圈）、`brief.py`（每日簡報 + 排程）、`resummarize.py`（補回缺失的摘要）、`tools/{fingpt_tool,finrl_tool,http}.py`（`http.py` 是對本機服務 GET 的共用重試層）；金鑰在 `agent/.env`，watchlist 在 `agent/watchlist.json`，簡報在 `agent/briefs/<as_of>.json`（三者都 gitignore）
+- `agent/main.py`（SSE 端點 + `/watchlist`、`/brief`、`/brief/run`）、`loop.py`（Gemini 迴圈）、`brief.py`（每日簡報 + 排程）、`resummarize.py`（補回缺失的摘要）、`review.py`（引擎評分）、`tools/{fingpt_tool,finrl_tool,http}.py`（`http.py` 是對本機服務 GET 的共用重試層）；金鑰在 `agent/.env`，watchlist 在 `agent/watchlist.json`，簡報在 `agent/briefs/<as_of>.json`（三者都 gitignore）
 - `ui/src/App.tsx`（版面、`view: market|stock`、六個分頁、共用 state）、`api.ts`（所有 fetch）、`i18n.ts`（EN／繁中）、`components/{market,fundamentals,technical,news,ownership,financials}/` 一卡一檔
 - gitignore 的：`FinRL/`、`FinGPT/`（上游 clone，當依賴用）、`envs/`、`finrl-work/`（訓練好的 5 個模型）
 
@@ -105,6 +105,7 @@ Phase 1–17 全部完成。Phase 1–16 的逐步決策紀錄在 `docs/phases.m
 - **`clean_data` 的隱形陷阱，訓練與推論都會中（Phase 17 實測）**：上游 `FeatureEngineer.clean_data` 會把 close 樞紐成 date×tic 後 `dropna(axis=1)`，**任何在窗口內有缺日的成分股會被整檔刪掉、不報錯**——用 2014 起點訓練 tech30 會 30 檔進、28 檔出（CRWD、UBER 消失），你還以為訓練了 30 檔。`train_basket.py` 因此把「有成分股被刪」與「網格有缺格」都改成硬錯誤。（script 1 後面那個 `fillna(0)` 作用在已清洗的資料上，實際是空操作，不是這個問題的來源。）
 - **推論端同一個陷阱（2026-09-24 實際發生）**：yfinance 會發布「只有部分成分股」的交易日（09-22 那天道瓊 30 只有 11 檔有資料），`clean_data` 於是刪掉其餘 19 檔 → `state_space` 變 111 → 模型報 `Unexpected observation shape`、端點 500。`build_window` 現在先用 `complete_sessions()` **丟掉不完整的「交易日」而不是不完整的「成分股」**（60 天回放少一天影響很小，少 19 欄則直接壞掉），並在 30 檔沒湊齊時回 503。`close` 是 null 的列也在這裡一併濾掉。
 - 所有籃子都是 `total_timesteps=20000`、**單一種子、單次訓練、無驗證集**：籃子之間的差異只能說明「這幾次訓練跑出來的結果」，不能當成「科技股籃比道瓊籃好／壞」的結論。這句話要留在 UI 與 README 裡。
+- **多數 agent 對同一檔的方向好幾週都不變**（2026-10-31 評分時發現）：例如 DOW·2014 五個 agent 裡有四個連續 26 個交易日對 NVDA 都是 SELL、對 JPM 都是 BUY；DOW·2019 的 ddpg 從沒喊過 BUY；DOW·2014 的 a2c 與 td3、Tech·2019 的 ddpg 與 td3 每一筆都相同。ddpg／td3 的 `shares` 常是 ±100（= `hmax`，看起來是動作飽和），但成因沒有深究。意思是這些 agent 的輸出比較像「固定的多空選股」而不是每日擇時——讀 FinRL 面板與評分時都要記得這點。
 - 每個交易日第一次呼叫約 4 秒，之後快取 6 ms。
 
 **FinGPT（`agent/tools/fingpt_tool.py`）**
@@ -129,6 +130,12 @@ Phase 1–17 全部完成。Phase 1–16 的逐步決策紀錄在 `docs/phases.m
 - **不要在 `_summarize` 外面再包重試**：它內部已經退避重試 3 次，外層再跑 N 輪就是 3N 次呼叫，一天 20 次的額度幾分鐘就沒了（2026-09-24 實際踩到）。它與 `loop.py` 一樣，遇到含 `PerDay` 的 429 直接放棄。
 - 測試時**不要**讓臨時 agent 寫到 `agent/briefs/`（正式排程會以為當天做完）；把 `brief.BRIEF_DIR`／`WATCHLIST_FILE` 指到 scratchpad，並把 `brief.scheduler` 換成空迴圈（做法見 git log 的 brief commit）。
 - 非 DOW 30 的代號允許進 watchlist：FinGPT 照跑，FinRL 那欄記 error、UI 顯示 `—`。上限 15 檔。
+
+**引擎評分（`agent/review.py`，2026-10-31）**
+- `cd agent && ../envs/fingpt/bin/python review.py`：讀 `agent/briefs/`，每筆 FinGPT 方向與 FinRL 的 BUY/SELL（HOLD 視為棄權）＋每籃五個 agent 的多數決，對 as_of 收盤起算 **5 個交易日**後的收盤價評分。要等 5 個交易日收完才評得到；價格走 `fingpt_tool._get`（openbb-api，有重試），且截在 `last_complete_session()`。
+- 每列除命中率外一定要並列基準：`up%`（永遠喊漲）、`rand%`（同樣的漲跌比例隨機打亂）、`follow%`（照著做的 5 日平均報酬）、`fixed`（方向從沒變過的代號數）。**單看命中率沒有意義**；`fixed` 滿的 agent 命中率只是「這段期間那幾檔剛好漲或跌」，有效樣本是幾檔 × 幾週，不是 n。
+- FinGPT 9 月（標題＋摘要）與 10-08 起（只有標題）**分開算、不要合併**；09-28～10-07 幾乎全空。每天一筆 5 日窗口會重疊、各檔也會一起動，所以 n 高估了獨立樣本。
+- 第一次結果（briefs 09-21～10-23）：**兩個引擎都看不出勝過基準**。FinGPT 10 月 51.0%（隨機 49.5%、永遠喊漲 52.1%，n=96），落在預測區間內的只有約 8%。最高的 sac（63–65%）是固定選股。數字會隨簡報累積變動，**不要把這次的數字寫死在 UI 裡**；要不要加 dashboard 評分卡等資料多幾週再決定。
 
 **UI**
 - FinRL 面板（`FinrlSignals.tsx`）有籃子切換鈕（短標籤 `DOW·14` / `DOW·19` / `TECH·19`，全名與說明在 tooltip），選擇存 `localStorage.basket` 且跨代號沿用，該代號沒有該籃時退回第一個。表格下方兩行灰字：該籃的 `note`（**`baskets.json` 的 note 是給 UI 看的，維持一句話；完整理由寫在 README／本檔，不要塞回設定檔**）＋ 固定的訓練限制警語（`basketCaveat`）＋ 免責聲明。改了 `baskets.json` 要重啟 backend（note 在 import 時讀入）。
